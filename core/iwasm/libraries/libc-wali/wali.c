@@ -32,6 +32,7 @@
 #include <sys/mman.h>
 #include <semaphore.h>
 #include <linux/prctl.h>
+#include <linux/futex.h>
 
 #include "wali.h"
 #include "copy.h"
@@ -1449,8 +1450,20 @@ long
 wali_syscall_futex(wasm_exec_env_t exec_env, WasmMemAddr uaddr, int32_t futex_op, int32_t val, WasmMemAddr timeout, WasmMemAddr uaddr2, int32_t val3)
 {
     SC(futex);
-    RETURN(__syscall6(SYS_futex, addr_wasm2native(exec_env, uaddr), futex_op, val, addr_wasm2native(exec_env, timeout), addr_wasm2native(exec_env, uaddr2), val3),
-           "futex", 6, uaddr, futex_op, val, timeout, uaddr2, val3);
+    long retval = -1;
+    switch (futex_op & FUTEX_CMD_MASK) {
+        case FUTEX_WAIT:
+        case FUTEX_LOCK_PI:
+        case FUTEX_LOCK_PI2:
+        case FUTEX_WAIT_BITSET:
+        case FUTEX_WAIT_REQUEUE_PI:
+            retval = __syscall6(SYS_futex, addr_wasm2native(exec_env, uaddr), futex_op, val, addr_wasm2native(exec_env, timeout), addr_wasm2native(exec_env, uaddr2), val3);
+            break;
+        default:
+            retval = __syscall6(SYS_futex, addr_wasm2native(exec_env, uaddr), futex_op, val, (uint32_t)timeout, addr_wasm2native(exec_env, uaddr2), val3);
+            break;
+    }
+    RETURN(retval, "futex", 6, uaddr, futex_op, val, timeout, uaddr2, val3);
 }
 
 // 204
